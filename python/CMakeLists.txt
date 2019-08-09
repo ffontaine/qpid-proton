@@ -112,35 +112,46 @@ endmacro(py_compile)
 py_compile(${CMAKE_CURRENT_BINARY_DIR} ${pysrc-generated} CPROTON_ARTIFACTS)
 py_compile(${CMAKE_CURRENT_SOURCE_DIR} "${pysrc}" PROTON_ARTIFACTS)
 
-find_program(EPYDOC_EXE epydoc)
-mark_as_advanced (EPYDOC_EXE)
-if (EPYDOC_EXE)
-   foreach (py_src_doc ${pysrc})
-     list(APPEND PY_DOC_FILES "${CMAKE_CURRENT_SOURCE_DIR}/${py_src_doc}")
-   endforeach(py_src_doc)
+
+find_program(SPHINX_EXE_PY2 sphinx-build-2 HINTS "/usr/bin")
+mark_as_advanced (SPHINX_EXE_PY2)
+find_program(SPHINX_EXE_PY3 sphinx-build-3 HINTS "/usr/bin")
+mark_as_advanced (SPHINX_EXE_PY3)
+
+# Version of Python used to build API must match version of Sphinx used to build the docs
+get_filename_component(PYTHON_EXECUTABLE_NAME ${PYTHON_EXECUTABLE} NAME)
+# Try matching for Python 3 first
+if ((SPHINX_EXE_PY3) AND (PYTHON_EXECUTABLE_NAME STREQUAL "python3"))
+    set(BUILD_SPHINX_DOCS TRUE)
+    set(SPHINX_EXE ${SPHINX_EXE_PY3})
+# Python 2 match
+elseif ((SPHINX_EXE_PY2) AND (PYTHON_EXECUTABLE_NAME STREQUAL "python"))
+    set(BUILD_SPHINX_DOCS TRUE)
+    set(SPHINX_EXE ${SPHINX_EXE_PY2})
+# No match found
+else ()
+    set(BUILD_SPHINX_DOCS FALSE)
+    message(WARNING "Python - Sphinx version mismatch - no Python API docs will be generated.")
+    message("Python executable used to build Proton: ${PYTHON_EXECUTABLE_NAME}")
+    if (SPHINX_EXE_PY2)
+        message("Sphinx for Python2 found: ${SPHINX_EXE_PY2}")
+    endif ()
+    if (SPHINX_EXE_PY3)
+        message("Sphinx for Python3 found: ${SPHINX_EXE_PY3}")
+    endif ()
+endif ()
+if (BUILD_SPHINX_DOCS)
    add_custom_target(docs-py
-     COMMAND ${PN_ENV_SCRIPT} -- PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
-             ${EPYDOC_EXE} -v --no-private --html -o ${CMAKE_CURRENT_BINARY_DIR}/html ${PY_DOC_FILES}
-     DEPENDS ${SWIG_MODULE_${cproton}_REAL_NAME})
+     COMMAND ${PN_ENV_SCRIPT} --
+         PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_BINARY_DIR}
+         LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}/c
+         ${SPHINX_EXE} -b html ${CMAKE_CURRENT_SOURCE_DIR}/docs ${CMAKE_CURRENT_BINARY_DIR}/docs)
    add_dependencies(docs docs-py)
-   install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/html/"
+   install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/"
            DESTINATION "${PROTON_SHARE}/docs/api-py"
            COMPONENT documentation
            OPTIONAL)
-endif (EPYDOC_EXE)
-
-find_program(SPHINX_EXE sphinx-build)
-mark_as_advanced (SPHINX_EXE)
-if (SPHINX_EXE)
-   add_custom_target(tutorial-py
-     COMMAND ${PN_ENV_SCRIPT} -- PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
-     ${SPHINX_EXE} -b html ${CMAKE_CURRENT_SOURCE_DIR}/docs ${CMAKE_CURRENT_BINARY_DIR}/tutorial)
-   add_dependencies(docs tutorial-py)
-   install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/tutorial/"
-           DESTINATION "${PROTON_SHARE}/docs/tutorial-py"
-           COMPONENT documentation
-           OPTIONAL)
-endif (SPHINX_EXE)
+endif ()
 
 install(FILES ${CPROTON_ARTIFACTS}
         DESTINATION ${PYTHON_SITEARCH_PACKAGES}
@@ -156,7 +167,7 @@ install(DIRECTORY examples/
         COMPONENT Python
         USE_SOURCE_PERMISSIONS)
 
-set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES "html;tutorial")
+set_directory_properties(PROPERTIES ADDITIONAL_MAKE_CLEAN_FILES docs)
 
 #
 # Set up the directory 'dist' for building the python native package
