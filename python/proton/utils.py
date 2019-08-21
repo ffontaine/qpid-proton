@@ -28,5 +28,5 @@ __all__ = [
     'SyncRequestResponse',
     'SendException',
     'LinkDetached',
-    'ConnectionClosed',
+    'ConnectionClosed'
 ]

@@ -112,45 +112,25 @@ endmacro(py_compile)
 py_compile(${CMAKE_CURRENT_BINARY_DIR} ${pysrc-generated} CPROTON_ARTIFACTS)
 py_compile(${CMAKE_CURRENT_SOURCE_DIR} "${pysrc}" PROTON_ARTIFACTS)
 
-
-find_program(SPHINX_EXE_PY2 sphinx-build-2 HINTS "/usr/bin")
-mark_as_advanced (SPHINX_EXE_PY2)
-find_program(SPHINX_EXE_PY3 sphinx-build-3 HINTS "/usr/bin")
-mark_as_advanced (SPHINX_EXE_PY3)
-
-# Version of Python used to build API must match version of Sphinx used to build the docs
-get_filename_component(PYTHON_EXECUTABLE_NAME ${PYTHON_EXECUTABLE} NAME)
-# Try matching for Python 3 first
-if ((SPHINX_EXE_PY3) AND (PYTHON_EXECUTABLE_NAME STREQUAL "python3"))
-    set(BUILD_SPHINX_DOCS TRUE)
-    set(SPHINX_EXE ${SPHINX_EXE_PY3})
-# Python 2 match
-elseif ((SPHINX_EXE_PY2) AND (PYTHON_EXECUTABLE_NAME STREQUAL "python"))
-    set(BUILD_SPHINX_DOCS TRUE)
-    set(SPHINX_EXE ${SPHINX_EXE_PY2})
-# No match found
+# Sphinx documentation
+check_python_module("sphinx" SPHINX_MODULE_FOUND)
+if (SPHINX_MODULE_FOUND)
+    message(STATUS "Python Sphinx module found - doc generation enabled.")
+    add_custom_target(docs-py
+        COMMAND ${PN_ENV_SCRIPT} --
+        PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_CURRENT_SOURCE_DIR}
+        LD_LIBRARY_PATH="${CMAKE_CURRENT_BINARY_DIR}/c"
+        ${PYTHON_EXECUTABLE} -m sphinx "${CMAKE_CURRENT_SOURCE_DIR}/docs" "${CMAKE_CURRENT_BINARY_DIR}/docs")
+    add_dependencies(docs docs-py)
+    install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/"
+            DESTINATION "${PROTON_SHARE}/docs/api-py"
+            COMPONENT documentation
+            OPTIONAL)
 else ()
-    set(BUILD_SPHINX_DOCS FALSE)
-    message(WARNING "Python - Sphinx version mismatch - no Python API docs will be generated.")
-    message("Python executable used to build Proton: ${PYTHON_EXECUTABLE_NAME}")
-    if (SPHINX_EXE_PY2)
-        message("Sphinx for Python2 found: ${SPHINX_EXE_PY2}")
-    endif ()
-    if (SPHINX_EXE_PY3)
-        message("Sphinx for Python3 found: ${SPHINX_EXE_PY3}")
-    endif ()
-endif ()
-if (BUILD_SPHINX_DOCS)
-   add_custom_target(docs-py
-     COMMAND ${PN_ENV_SCRIPT} --
-         PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}:${CMAKE_CURRENT_BINARY_DIR}
-         LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}/c
-         ${SPHINX_EXE} -b html ${CMAKE_CURRENT_SOURCE_DIR}/docs ${CMAKE_CURRENT_BINARY_DIR}/docs)
-   add_dependencies(docs docs-py)
-   install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/docs/"
-           DESTINATION "${PROTON_SHARE}/docs/api-py"
-           COMPONENT documentation
-           OPTIONAL)
+    execute_process(COMMAND ${PYTHON_EXECUTABLE} --version
+                    ERROR_VARIABLE PYTHYON_VERSION_ERR)
+    string(STRIP ${PYTHYON_VERSION_ERR} PYTHON_VERSION_STR)
+    message(WARNING "Sphinx module NOT found for ${PYTHON_VERSION_STR} - doc generation disabled.")
 endif ()
 
 install(FILES ${CPROTON_ARTIFACTS}
